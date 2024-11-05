@@ -24,6 +24,8 @@ class WebScraping():
 
 
     def titlu(self, tag):
+        """Shows all the titles from the URL that the user choose."""
+
         self.soup = BeautifulSoup(self.response.content, 'lxml')
         self.titles = self.soup.select(tag)
         self.lista_titluri_anunturi = []
@@ -36,6 +38,8 @@ class WebScraping():
 
 
     def pret(self, tag):
+        """Shows all the prices from the URL that the user choose."""
+
         self.soup = BeautifulSoup(self.response.content, 'lxml')
         self.prices = self.soup.select(tag)
         self.lista_preturi_anunturi = []
@@ -48,6 +52,8 @@ class WebScraping():
 
 
     def link(self, tag):
+        """Show all the links from the URL that the user choose."""
+
         self.soup = BeautifulSoup(self.response.content, 'lxml')
         self.links = self.soup.select(tag)
         self.lista_linkuri_anuntrui = []
@@ -70,6 +76,8 @@ class WebScraping():
 
 
     def arata_anunturi(self,titlu, pret, link):
+        """Lists the pots in the console section."""
+
         titlu = titlu
         pret = pret
         link = link
@@ -84,6 +92,7 @@ class WebScraping():
 
 
     def create_csv(self):
+        """Creates a CSV file as a way to organize and storage the data that just been scrapped."""
         nume_csv = input('Ce nume doriti sa aiba csv-ul dvs?\n')
         try:
             with open(nume_csv + '.csv', mode='w', newline='', encoding='utf-8') as file:
@@ -99,3 +108,31 @@ class WebScraping():
                 print(f'Fisierul {nume_csv} a fost creat cu succes!')
         except Exception as e:
             print(f'A aparut o eroare la crearea fisierului csv. {e}')
+
+
+    def selection(self,):
+
+        alege_csv = input('Introduceti numele fisierului CSV.\n')
+        try:
+            with open(alege_csv + '.csv', mode='r', newline="", encoding='utf-8')as file:
+                reader = csv.reader(file)
+                try:
+                    pret_tinta = int(input('Care este suma maxima pe care doriti sa o platiti?\n'))
+                except Exception as e:
+                    print(f'A aparut o eroare:{e}')
+
+                next(reader, None)
+                for row in reader:
+                    try:
+                        pret = int(row[1])
+                        if pret <= pret_tinta:
+                            print(f'Nume: {row[0]}, Preț: {row[1]}, Link: {row[2]}\n', '-'*35)
+                    except ValueError:
+                        print("Unul dintre prețuri nu a putut fi convertit la întreg.")
+                    except IndexError:
+                        print("Rândul nu conține suficiente coloane.")
+
+        except FileNotFoundError:
+            print(f"Fisierul {alege_csv} nu a fost găsit.")
+        except Exception as e:
+            print(f'A apărut o eroare: {e}')
