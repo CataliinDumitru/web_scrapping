@@ -2,12 +2,22 @@ import requests
 from bs4 import BeautifulSoup
 import lxml
 import csv
+import re
+import logging
+
+
+logging.basicConfig(
+    filename='web_scaping.log',
+    level=logging.DEBUG,
+    format ='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 
 class WebScraping():
 
     def __init__(self, url):
-        #Initiaza conexiunea cu serverul de pe care vrem sa luam datele
-        # si returneaza un status_code pentru a vedea in ce stadiu este conexiunea
+        #Initiate the connexion with the server we want to get the data we want
+        # and return a status code for the connexion
         self.url = url
         self.response = requests.get(self.url)
         self.lista_titluri_anunturi = []
@@ -15,9 +25,9 @@ class WebScraping():
         self.lista_linkuri_anuntrui = []
         self.lista_linkuri_finala = []
         if self.response.status_code == 200:
-            print("Am reusit sa extragem informatiile.")
+            logging.info("Am reusit sa extragem informatiile.")
         else:
-            print(f'A aparut o eroare: {self.response.status_code}')
+            logging.error(f'A aparut o eroare: {self.response.status_code}')
 
 
 
@@ -45,9 +55,12 @@ class WebScraping():
         self.lista_preturi_anunturi = []
         for price in self.prices:
             if price:
-                self.lista_preturi_anunturi.append(price.get_text())
+                pret_text = price.get_text().replace(' ', '')
+                pret_numeric = re.split(r'leiPretulnegociabil|lei|€|\$', pret_text)[0].replace(',', '.')
+                self.lista_preturi_anunturi.append(pret_numeric)
         return self.lista_preturi_anunturi
 
+    #self.lista_preturi_anunturi.append(price.get_text().split(" lei")[0].replace(' ', ''))
 
 
 
@@ -66,6 +79,7 @@ class WebScraping():
 
         #lista_linkuri_finala reprezinta lista in care functia link returneaza lista finala a linkurilor.
         #neavand bucata de cod de mai jos, functia ar returna o lista duplicata de linkuri.
+
         self.lista_linkuri_finala = [self.lista_linkuri_anuntrui[0]]
         for i in range(1, len(self.lista_linkuri_anuntrui)):
             if self.lista_linkuri_anuntrui[i] != self.lista_linkuri_anuntrui[i-1]:
@@ -83,11 +97,11 @@ class WebScraping():
         link = link
 
         if not titlu or not pret or not link:
-            print("Nu sunt anunțuri de afișat.")
+            logging.info("Nu sunt anunțuri de afișat.")
             return
 
         for t, p, l in zip(titlu, pret, link):
-            print(f'Numele anuntului este: {t}\nPretul anuntului este: {p}\nLinkul catre anunt este: {l}\n{"-"*35}')
+            logging.info(f'Numele anuntului este: {t}\nPretul anuntului este: {p}\nLinkul catre anunt este: {l}\n{"-"*35}')
 
 
 
@@ -105,34 +119,40 @@ class WebScraping():
 
                 for t, p, l in zip(self.lista_titluri_anunturi, self.lista_preturi_anunturi, self.lista_linkuri_finala):
                     writer.writerow([t, p, l])
-                print(f'Fisierul {nume_csv} a fost creat cu succes!')
+                logging.info(f'Fisierul {nume_csv} a fost creat cu succes!')
         except Exception as e:
-            print(f'A aparut o eroare la crearea fisierului csv. {e}')
+            logging.error(f'A aparut o eroare la crearea fisierului csv. {e}')
 
 
     def selection(self,):
 
-        alege_csv = input('Introduceti numele fisierului CSV.\n')
-        try:
-            with open(alege_csv + '.csv', mode='r', newline="", encoding='utf-8')as file:
-                reader = csv.reader(file)
-                try:
-                    pret_tinta = int(input('Care este suma maxima pe care doriti sa o platiti?\n'))
-                except Exception as e:
-                    print(f'A aparut o eroare:{e}')
-
-                next(reader, None)
-                for row in reader:
+        """Take's a CSV file, open it, read it and ask what's the ammount of money you want to spend on the article you are looking for."""
+        while True:
+            alege_csv = input('Introduceti numele fisierului CSV.\n')
+            try:
+                with open(alege_csv + '.csv', mode='r', newline="", encoding='utf-8')as file:
+                    reader = csv.reader(file)
                     try:
-                        pret = int(row[1])
-                        if pret <= pret_tinta:
-                            print(f'Nume: {row[0]}, Preț: {row[1]}, Link: {row[2]}\n', '-'*35)
-                    except ValueError:
-                        print("Unul dintre prețuri nu a putut fi convertit la întreg.")
-                    except IndexError:
-                        print("Rândul nu conține suficiente coloane.")
+                        pret_tinta = int(input('Care este suma maxima pe care doriti sa o platiti?\n'))
+                    except Exception as e:
+                        logging.error(f'A aparut o eroare:{e}')
 
-        except FileNotFoundError:
-            print(f"Fisierul {alege_csv} nu a fost găsit.")
-        except Exception as e:
-            print(f'A apărut o eroare: {e}')
+                    next(reader, None)
+                    for row in reader:
+                        try:
+                            pret = float(row[1])
+                            if pret <= pret_tinta:
+                                print(f'Nume: {row[0]}\nPreț: {row[1]}\nLink: {row[2]}\n', '-'*35)
+
+                        except ValueError:
+                            logging.error("Unul dintre prețuri nu a putut fi convertit la întreg.")
+                        except IndexError:
+                            logging.error("Rândul nu conține suficiente coloane.")
+
+            except FileNotFoundError:
+                logging.error(f"Fisierul {alege_csv} nu a fost găsit.")
+            except Exception as e:
+                logging.error(f'A apărut o eroare: {e}')
+            continuare = input("Doriți să căutați într-un alt fișier CSV? (da/nu): ").strip().lower()
+            if continuare != 'da':
+                break
