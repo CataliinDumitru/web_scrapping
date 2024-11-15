@@ -11,14 +11,10 @@ import sqlite3
 # Importurile pentru Selenium
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.devtools.v85.network import continue_intercepted_request
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException, TimeoutException
-
-
-
-
+from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException, TimeoutException, \
+    StaleElementReferenceException
 
 logging.basicConfig(
     filename='web_scaping.log',
@@ -121,82 +117,83 @@ class WebScraping():
         lista_preturi = []
         lista_linkuri = []
 
+        # Inițializează fișierul CSV
         nume_csv = input('Ce nume doriti sa aiba csv-ul dvs?\n')
         with open(nume_csv + '.csv', mode='w', newline='', encoding='utf-8') as file:
             writer = csv.writer(file)
 
+            # Citirea și scrierea antetului
             coloane_csv = input('Ce coloane doriti sa aibe fisierul dvs?\n').lower()
             header = [col.strip() for col in coloane_csv.split(',')]
             writer.writerow(header)
 
             # Initializează driver-ul
             driver = webdriver.Chrome()
-
-            # Accesează pagina dorită
             driver.get(url)
 
             # Accept cookie-uri (dacă este necesar)
             time.sleep(1)
-            accept = driver.find_element(By.CSS_SELECTOR, "#onetrust-accept-btn-handler")
-            accept.click()
+            try:
+                accept = driver.find_element(By.CSS_SELECTOR, "#onetrust-accept-btn-handler")
+                accept.click()
+            except NoSuchElementException:
+                pass
 
-            # Scrollează până la capătul paginii pentru a încărca toate anunțurile
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)
-
+            # Așteaptă încărcarea anunțurilor și extrage-le pagină cu pagină
             while True:
-                # Așteaptă încărcarea completă a anunțurilor
-                time.sleep(2)  # Ajustează timpul de așteptare
+                time.sleep(2)  # Ajustează timpul de așteptare dacă e necesar
 
                 # Extrage anunțurile de pe pagina curentă
-                anunturi = driver.find_elements(By.CSS_SELECTOR, "div[data-cy='l-card']")  # Selector pentru fiecare anunț
-
+                anunturi = driver.find_elements(By.CSS_SELECTOR, "div[data-cy='l-card']")
                 for anunt in anunturi:
-                    # Extrage titlul
                     try:
                         title = anunt.find_element(By.CSS_SELECTOR, ".css-1wxaaza").text
                     except NoSuchElementException:
                         title = "Titlu indisponibil"
 
-                    # Extrage prețul
                     try:
                         price = anunt.find_element(By.CSS_SELECTOR, "p.css-13afqrm").text
                         if price:
                             pret_text = price.replace(' ', '')
                             pret_numeric = re.split(r'leiPretulnegociabil|lei|€|£|\$', pret_text)[0].replace(',', '.')
-                            lista_preturi.append(price)  # Adaugă doar prețul numeric
+                        else:
+                            pret_numeric = "Preț indisponibil"
                     except NoSuchElementException:
-                        price = "Preț indisponibil"
+                        pret_numeric = "Preț indisponibil"
 
-                    # Extrage link-ul
                     try:
                         link = anunt.find_element(By.CSS_SELECTOR, "a").get_attribute("href")
                     except NoSuchElementException:
                         link = "Link indisponibil"
 
-                    # Salvează datele în liste
                     lista_titluri.append(title)
+                    lista_preturi.append(pret_numeric)
                     lista_linkuri.append(link)
 
-                # Derulează puțin în sus pentru a face butonul "Pagina următoare" vizibil
-                driver.execute_script("window.scrollBy(0, -200);")
-                time.sleep(2)
+                # Scrierea anunțurilor în fișierul CSV
+                for t, p, l in zip(lista_titluri, lista_preturi, lista_linkuri):
+                    writer.writerow([t, p, l])
 
-                # Verifică dacă există butonul de "Pagina următoare" și trece la următoarea pagină
+                # Golește listele pentru a evita duplicarea
+                lista_titluri.clear()
+                lista_preturi.clear()
+                lista_linkuri.clear()
+
+                # Localizează și clic pe butonul "Pagina următoare"
                 try:
-                    next_button = driver.find_element(By.CSS_SELECTOR, "#mainContent > div > div.css-1nvt13t > form > div:nth-child(5) > div > section.css-j8u5qq > div > ul > a > svg")
+                    next_button = WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "a[data-cy='pagination-forward']"))
+                    )
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", next_button)
+                    time.sleep(2)
                     next_button.click()
-                    time.sleep(3)  # Așteaptă încărcarea paginii următoare
-                except NoSuchElementException:
+                    time.sleep(3)  # Așteaptă încărcarea noii pagini
+                except (StaleElementReferenceException, TimeoutException):
                     print("Nu mai există o pagină următoare.")
-                    break  # Ieși din bucla while
+                    break
 
-            # Scrierea datelor în CSV după ce ai terminat de procesat toate paginile
-            for t, p, l in zip(lista_titluri, lista_preturi, lista_linkuri):
-                writer.writerow([t, p, l])
-
-            logging.info(f'Fisierul {nume_csv} a fost creat cu succes!')
-            driver.quit()  # Închide driver-ul după ce am terminat
+            logging.info(f'Fisierul {nume_csv}.csv a fost creat cu succes!')
+            driver.quit()
 
 
     def arata_anunturi(self):
@@ -212,26 +209,6 @@ class WebScraping():
 
         for t, p, l in zip(titlu, pret, link):
             print(f'Numele anuntului este: {t}\nPretul anuntului este: {p}\nLinkul catre anunt este: {l}\n{"-"*35}')
-
-
-
-    # def create_csv(self):
-    #     """Creates a CSV file as a way to organize and storage the data that just been scrapped."""
-    #     nume_csv = input('Ce nume doriti sa aiba csv-ul dvs?\n')
-    #     try:
-    #         with open(nume_csv + '.csv', mode='w', newline='', encoding='utf-8') as file:
-    #             writer = csv.writer(file)
-    #
-    #
-    #             coloane_csv = input('Ce coloane doriti sa aibe fisierul dvs?\n').lower()
-    #             header = [col.strip() for col in coloane_csv.split(',')]
-    #             writer.writerow(header)
-    #
-    #             for t, p, l in zip(self.lista_titluri_anunturi, self.lista_preturi_anunturi, self.lista_linkuri_anunturi):
-    #                 writer.writerow([t, p, l])
-    #             logging.info(f'Fisierul {nume_csv} a fost creat cu succes!')
-    #     except Exception as e:
-    #         logging.error(f'A aparut o eroare la crearea fisierului csv. {e}')
 
 
     def selection(self):
