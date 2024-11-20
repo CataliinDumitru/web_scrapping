@@ -256,7 +256,7 @@ class WebScraping:
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS Anunturi (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        titlu TEXT NOT NULL UNIQUE,
+                        titlu TEXT NOT NULL,
                         pret INTEGER NOT NULL,
                         link TEXT NOT NULL UNIQUE, 
                         status TEXT NOT NULL
